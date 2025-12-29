@@ -17,6 +17,7 @@ usage() {
     echo "usage: ./ci-operation.sh [action] [target]"
     echo "  - pull: remove the existed free5gc repo under base/ and clone a new free5gc with its NFs"
     echo "  - fetch [NF] [PR#]: fetch the target NF's PR"
+    echo "  - testAll: run all free5gc tests"
     echo "  - build: build the necessary images"
     echo "  - up <ulcl-ti | ulcl-mp>: bring up the compose"
     echo "  - down <ulcl-ti | ulcl-mp>: shut down the compose"
@@ -42,11 +43,21 @@ main() {
             git checkout pr-$3
             cd ../../../../
         ;;
+        "testAll")
+            cd base/free5gc/
+            make all
+            ./force_kill.sh
+            ./test.sh All
+            cd ../../
+        ;;
         "build")
             make ulcl
         ;;
         "up")
             case "$2" in
+                "basic-charging")
+                    docker compose -f docker-compose-basic.yaml up
+                ;;
                 "ulcl-ti")
                     docker compose -f docker-compose-ulcl-ti.yaml up
                 ;;
@@ -59,6 +70,9 @@ main() {
         ;;
         "down")
             case "$2" in
+                "basic-charging")
+                    docker compose -f docker-compose-basic.yaml down
+                ;;
                 "ulcl-ti")
                     docker compose -f docker-compose-ulcl-ti.yaml down
                 ;;
@@ -71,6 +85,9 @@ main() {
         ;;
         "test")
             case "$2" in
+                "basic-charging")
+                    docker exec ci /bin/bash -c "cd /root/test && ./test-basic-charging.sh"
+                ;;
                 "ulcl-ti")
                     docker exec ue /bin/bash -c "cd /root/test && ./test-ulcl-ti.sh TestULCLTrafficInfluence"
                 ;;
