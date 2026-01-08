@@ -9,7 +9,7 @@
 #
 ##########################
 
-TEST_POOL="TestULCLMultiPathCi1|TestULCLMultiPathCi2"
+TEST_POOL="TestULCLMultiPathUe1|TestULCLMultiPathUe2"
 
 # check if the test name is in the allowed test pool
 if [[ ! "$1" =~ ^($TEST_POOL)$ ]]; then
