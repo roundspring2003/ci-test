@@ -5,7 +5,7 @@
 # usage:
 # ./ci-test-ulcl-mp.sh <test-name>
 #
-# e.g. ./ci-test-ulcl-mp.sh <TestULCLMultiPathCi1 | TestULCLMultiPathCi2>
+# e.g. ./ci-test-ulcl-mp.sh <TestULCLMultiPathUe1 | TestULCLMultiPathUe2>
 #
 ##########################
 
@@ -22,11 +22,11 @@ fi
 echo "Running test... $1"
 
 case "$1" in
-    "TestULCLMultiPathCi1")
+    "TestULCLMultiPathUe1")
         docker exec ue-1 /bin/bash -c "cd test && ./test-ulcl-mp.sh $1"
         exit_code=$?
     ;;
-    "TestULCLMultiPathCi2")
+    "TestULCLMultiPathUe2")
         docker exec ue-2 /bin/bash -c "cd test && ./test-ulcl-mp.sh $1"
         exit_code=$?
     ;;
