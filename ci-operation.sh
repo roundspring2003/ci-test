@@ -19,9 +19,9 @@ usage() {
     echo "  - fetch [NF] [PR#]: fetch the target NF's PR"
     echo "  - testAll: run all free5gc tests"
     echo "  - build: build the necessary images"
-    echo "  - up <ulcl-ti | ulcl-mp>: bring up the compose"
-    echo "  - down <ulcl-ti | ulcl-mp>: shut down the compose"
-    echo "  - test <ulcl-ti | ulcl-mp>: run ULCL test"
+    echo "  - up <basic-charging | ulcl-ti | ulcl-mp>: bring up the compose"
+    echo "  - down <basic-charging | ulcl-ti | ulcl-mp>: shut down the compose"
+    echo "  - test <basic-charging | ulcl-ti | ulcl-mp>: run ULCL test"
     echo "  - exec <ue | ue-1 | ue-2>: enter the ue container"
 }
 
@@ -51,7 +51,7 @@ main() {
             cd ../../
         ;;
         "build")
-            make ulcl
+            make nfs
         ;;
         "up")
             case "$2" in
@@ -86,7 +86,7 @@ main() {
         "test")
             case "$2" in
                 "basic-charging")
-                    docker exec ci /bin/bash -c "cd /root/test && ./test-basic-charging.sh"
+                    docker exec ue /bin/bash -c "cd /root/test && ./test-basic-charging.sh"
                 ;;
                 "ulcl-ti")
                     docker exec ue /bin/bash -c "cd /root/test && ./test-ulcl-ti.sh TestULCLTrafficInfluence"
@@ -101,13 +101,13 @@ main() {
         ;;
         "exec")
             case "$2" in
-                "ci")
+                "ue")
                     docker exec -it ue bash
                 ;;
-                "ci-1")
+                "ue-1")
                     docker exec -it ue-1 bash
                 ;;
-                "ci-2")
+                "ue-2")
                     docker exec -it ue-2 bash
                 ;;
                 *)
