@@ -79,8 +79,7 @@ func pingOneOneOneOne(t *testing.T) {
 }
 
 func tiOperation(t *testing.T, operation string) {
-	cmd := exec.Command("bash", "api-udr-ti-data-action.sh", operation)
-	cmd.Dir = ".."
+	cmd := exec.Command("bash", "../api-udr-ti-data-action.sh", operation)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Errorf("TI operation failed: expected %s success, but got %v, output: %s", operation, err, output)
