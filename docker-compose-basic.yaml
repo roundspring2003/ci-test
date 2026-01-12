@@ -29,29 +29,6 @@ services:
         aliases:
           - upf.free5gc.org
         ipv4_address: 10.100.200.8
-      n6-net:
-        aliases:
-          - upf.n6.org
-
-  free5gc-n6gw: # n6gw
-    container_name: n6gw
-    build:
-      context: ./dn_n6gw
-      args:
-        DEBUG_TOOLS: "false"
-    command: bash -c "./n6gw-iptables.sh && sleep infinity"
-    volumes: 
-      - ./config/iptables/n6gw-iptables.sh:/root/n6gw-iptables.sh
-    cap_add:
-      - NET_ADMIN
-    networks:
-      privnet:
-        aliases:
-          - n6gw.free5gc.org
-      n6-net:
-        aliases:
-          - n6gw.local
-        ipv4_address: 10.100.50.10
 
   free5gc-nrf: # nrf
     container_name: nrf
@@ -361,6 +338,6 @@ networks:
         - subnet: 10.0.2.0/24
     driver_opts:
       com.docker.network.bridge.name: br-ran-ue
-      
+
 volumes:
   dbdata:
