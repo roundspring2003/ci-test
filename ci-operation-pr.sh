@@ -6,9 +6,10 @@
 #       The script will automatically use sudo when needed.
 #
 # Usage:
-#   ./ci-test-pr.sh nf <NF1> <PR1> [<PR2> ...] [<NF2> <PR3> ...] [OPTIONS]
-#   ./ci-test-pr.sh lib <LIBRARY> <PR#> [OPTIONS]
-#   ./ci-test-pr.sh free5gc <PR#> nf <NF1> <PR1> [<NF2> <PR2> ...] [OPTIONS]
+#   ./ci-operation-pr.sh nf <NF1> <PR1> [<PR2> ...] [<NF2> <PR3> ...] [OPTIONS]
+#   ./ci-operation-pr.sh nf <NF1> <PR1> [...] lib <LIB1> <PR1> [...] [OPTIONS]
+#   ./ci-operation-pr.sh lib <LIBRARY> <PR#> [OPTIONS]
+#   ./ci-operation-pr.sh free5gc <PR#> nf <NF1> <PR1> [<NF2> <PR2> ...] [OPTIONS]
 #
 # OPTIONS:
 #   --skip-docker    Skip Docker Compose tests
@@ -20,6 +21,8 @@
 #   ./ci-operation-pr.sh nf smf 170 183 192
 #   ./ci-operation-pr.sh nf smf 170 183 192 udm 80 81 amf 50
 #   ./ci-operation-pr.sh nf smf 188 udm 77 --skip-docker
+#   ./ci-operation-pr.sh nf udm 76 lib util 37         # NF PR + library PR
+#   ./ci-operation-pr.sh nf amf 50 smf 60 lib nas 44 openapi 67  # Multiple
 #   ./ci-operation-pr.sh lib openapi 67
 #   ./ci-operation-pr.sh free5gc 787 nf amf 194   # Test main repo PR with NF PR
 #
@@ -63,9 +66,15 @@ SUPPORTED_NFS="amf ausf bsf chf n3iwf nef nrf nssf pcf smf tngf udm udr upf webc
 # Report directory
 REPORT_DIR="testing_output"
 
+is_lib() {
+    local name=$1
+    [[ " $SUPPORTED_LIBS " =~ " $name " ]]
+}
+
 usage() {
     echo "Usage:"
     echo "  $0 nf <NF1> <PR1> [<PR2> ...] [<NF2> <PR3> ...] [OPTIONS]"
+    echo "  $0 nf <NF1> <PR1> [...] lib <LIB1> <PR1> [...] [OPTIONS]"
     echo "  $0 lib <LIBRARY> <PR#> [OPTIONS]"
     echo "  $0 free5gc <PR#> nf <NF1> <PR1> [<NF2> <PR2> ...] [OPTIONS]"
     echo ""
@@ -78,6 +87,7 @@ usage() {
     echo "  $0 nf amf 193"
     echo "  $0 nf smf 170 183 192              # Multiple PRs for same NF"
     echo "  $0 nf smf 170 183 udm 80 81 amf 50 # Multiple NFs with multiple PRs"
+    echo "  $0 nf udm 76 lib util 37           # NF PR + library PR combined"
     echo "  $0 lib openapi 67"
     echo "  $0 free5gc 787 nf amf 194          # Test main repo PR #787 with AMF PR #194"
     echo ""
@@ -144,6 +154,9 @@ done
 # Associative array to store NF -> PR list mapping
 declare -A NF_PRS
 
+# Associative array to store Library -> PR list mapping
+declare -A LIB_PRS
+
 # Variable to store main free5gc repo PR
 FREE5GC_PR=""
 
@@ -205,32 +218,66 @@ case $TYPE in
         ;;
     nf)
         # Parse NF and PR pairs from remaining args
-        # Format: <NF1> <PR1> [<PR2> ...] [<NF2> <PR3> ...]
+        # Format: <NF1> <PR1> [<PR2> ...] [<NF2> <PR3> ...] [lib <LIB1> <PR1> ...]
         if [ ${#REMAINING_ARGS[@]} -lt 2 ]; then
             echo "Error: At least one NF and PR number required"
             usage
         fi
         
         CURRENT_NF=""
+        CURRENT_LIB=""
+        PARSING_MODE="nf"  # nf or lib
+        
         for arg in "${REMAINING_ARGS[@]}"; do
-            if is_nf "$arg"; then
-                CURRENT_NF="$arg"
-                if [ -z "${NF_PRS[$CURRENT_NF]}" ]; then
-                    NF_PRS[$CURRENT_NF]=""
-                fi
-            elif is_number "$arg"; then
-                if [ -z "$CURRENT_NF" ]; then
-                    echo "Error: PR number '$arg' without NF name"
+            # Check if switching to lib mode
+            if [ "$arg" = "lib" ]; then
+                PARSING_MODE="lib"
+                CURRENT_NF=""
+                CURRENT_LIB=""
+                continue
+            fi
+            
+            if [ "$PARSING_MODE" = "nf" ]; then
+                if is_nf "$arg"; then
+                    CURRENT_NF="$arg"
+                    if [ -z "${NF_PRS[$CURRENT_NF]}" ]; then
+                        NF_PRS[$CURRENT_NF]=""
+                    fi
+                elif is_number "$arg"; then
+                    if [ -z "$CURRENT_NF" ]; then
+                        echo "Error: PR number '$arg' without NF name"
+                        usage
+                    fi
+                    if [ -z "${NF_PRS[$CURRENT_NF]}" ]; then
+                        NF_PRS[$CURRENT_NF]="$arg"
+                    else
+                        NF_PRS[$CURRENT_NF]="${NF_PRS[$CURRENT_NF]} $arg"
+                    fi
+                else
+                    echo "Error: Unknown argument '$arg' (not a valid NF or PR number)"
                     usage
                 fi
-                if [ -z "${NF_PRS[$CURRENT_NF]}" ]; then
-                    NF_PRS[$CURRENT_NF]="$arg"
-                else
-                    NF_PRS[$CURRENT_NF]="${NF_PRS[$CURRENT_NF]} $arg"
-                fi
             else
-                echo "Error: Unknown argument '$arg' (not a valid NF or PR number)"
-                usage
+                # Parsing lib mode
+                if is_lib "$arg"; then
+                    CURRENT_LIB="$arg"
+                    if [ -z "${LIB_PRS[$CURRENT_LIB]}" ]; then
+                        LIB_PRS[$CURRENT_LIB]=""
+                    fi
+                elif is_number "$arg"; then
+                    if [ -z "$CURRENT_LIB" ]; then
+                        echo "Error: PR number '$arg' without library name"
+                        usage
+                    fi
+                    if [ -z "${LIB_PRS[$CURRENT_LIB]}" ]; then
+                        LIB_PRS[$CURRENT_LIB]="$arg"
+                    else
+                        LIB_PRS[$CURRENT_LIB]="${LIB_PRS[$CURRENT_LIB]} $arg"
+                    fi
+                else
+                    echo "Error: Unknown argument '$arg' (not a valid library or PR number)"
+                    usage
+                fi
             fi
         done
         
@@ -275,6 +322,12 @@ if [ "$TYPE" = "nf" ]; then
     for nf in "${!NF_PRS[@]}"; do
         echo "  - $nf: PRs ${NF_PRS[$nf]}"
     done
+    if [ ${#LIB_PRS[@]} -gt 0 ]; then
+        echo "Library/PR Configuration:"
+        for lib in "${!LIB_PRS[@]}"; do
+            echo "  - $lib: PRs ${LIB_PRS[$lib]}"
+        done
+    fi
 else
     echo "Library: $LIBRARY, PR: #$LIB_PR"
 fi
@@ -306,6 +359,12 @@ if [ "$TYPE" = "nf" ]; then
         pr_joined="${prs// /_}"
         PR_STR="${PR_STR}${nf}_${pr_joined}_"
     done
+    # Add library PRs to filename if present
+    for lib in "${!LIB_PRS[@]}"; do
+        prs="${LIB_PRS[$lib]}"
+        pr_joined="${prs// /_}"
+        PR_STR="${PR_STR}${lib}_${pr_joined}_"
+    done
     PR_STR="${PR_STR%_}"  # Remove trailing underscore
 else
     PR_STR="${LIBRARY}_${LIB_PR}"
@@ -328,6 +387,12 @@ REPORT_FILE="$REPORT_DIR/pr_test_${PR_STR}_$(date +%Y%m%d_%H%M%S).txt"
         for nf in "${!NF_PRS[@]}"; do
             echo "  - $nf: PRs ${NF_PRS[$nf]}"
         done
+        if [ ${#LIB_PRS[@]} -gt 0 ]; then
+            echo "Library/PR Configuration:"
+            for lib in "${!LIB_PRS[@]}"; do
+                echo "  - $lib: PRs ${LIB_PRS[$lib]}"
+            done
+        fi
     else
         echo "Library: $LIBRARY, PR: #$LIB_PR"
     fi
@@ -359,10 +424,87 @@ fi
 # ============================================================
 log_step 2 "Fetching and Merging PR(s)"
 
+# Helper function to apply library PR replacement
+apply_library_pr() {
+    local lib_name=$1
+    local lib_pr=$2
+    
+    log_info "Fetching $lib_name PR #$lib_pr info from GitHub API..."
+    
+    local PR_API_URL="https://api.github.com/repos/free5gc/$lib_name/pulls/$lib_pr"
+    local PR_INFO=$(curl -s "$PR_API_URL")
+    
+    # Extract PR author (head.user.login) and commit hash (head.sha)
+    local PR_AUTHOR=$(echo "$PR_INFO" | grep -o '"login": "[^"]*"' | head -1 | cut -d'"' -f4)
+    local PR_COMMIT=$(echo "$PR_INFO" | grep -o '"sha": "[^"]*"' | head -1 | cut -d'"' -f4)
+    local PR_STATE=$(echo "$PR_INFO" | grep -o '"state": "[^"]*"' | head -1 | cut -d'"' -f4)
+    
+    if [ -z "$PR_AUTHOR" ] || [ -z "$PR_COMMIT" ]; then
+        log_fail "Failed to get $lib_name PR #$lib_pr info from GitHub API"
+        return 1
+    fi
+    
+    log_info "$lib_name PR #$lib_pr: Author=$PR_AUTHOR, Commit=${PR_COMMIT:0:12}, State=$PR_STATE"
+    
+    local ORIGINAL_MODULE="github.com/free5gc/$lib_name"
+    local REPLACE_MODULE="github.com/$PR_AUTHOR/$lib_name@$PR_COMMIT"
+    
+    log_info "Replace: $ORIGINAL_MODULE => $REPLACE_MODULE"
+    
+    # Update all NFs
+    local UPDATED_MODULES=""
+    for nf in amf ausf bsf chf n3iwf nef nrf nssf pcf smf tngf udm udr upf; do
+        local nf_dir="NFs/$nf"
+        if [ -d "$nf_dir" ] && grep -q "$ORIGINAL_MODULE" "$nf_dir/go.mod" 2>/dev/null; then
+            cd "$nf_dir"
+            if go mod edit -replace "$ORIGINAL_MODULE=$REPLACE_MODULE"; then
+                go mod tidy 2>/dev/null || true
+                UPDATED_MODULES="$UPDATED_MODULES $nf"
+            fi
+            cd ../../
+        fi
+    done
+    
+    # Update test module
+    if grep -q "$ORIGINAL_MODULE" "test/go.mod" 2>/dev/null; then
+        cd test
+        go mod edit -replace "$ORIGINAL_MODULE=$REPLACE_MODULE"
+        go mod tidy 2>/dev/null || true
+        UPDATED_MODULES="$UPDATED_MODULES test"
+        cd ..
+    fi
+    
+    # Update main go.mod
+    if grep -q "$ORIGINAL_MODULE" "go.mod" 2>/dev/null; then
+        go mod edit -replace "$ORIGINAL_MODULE=$REPLACE_MODULE"
+        go mod tidy 2>/dev/null || true
+        UPDATED_MODULES="$UPDATED_MODULES main"
+    fi
+    
+    log_pass "$lib_name PR #$lib_pr applied to:$UPDATED_MODULES"
+    echo "  - $lib_name #$lib_pr: REPLACED (Author: $PR_AUTHOR, Commit: ${PR_COMMIT:0:12})" >> "$SCRIPT_DIR/$REPORT_FILE"
+    echo "    Updated:$UPDATED_MODULES" >> "$SCRIPT_DIR/$REPORT_FILE"
+}
+
 if [ "$TYPE" = "nf" ]; then
     echo "[STEP 2] Fetch/Merge PRs:" >> "$REPORT_FILE"
     
-    # First, merge main free5gc repo PR if specified
+    # First, apply library PRs if specified (before NF merges)
+    if [ ${#LIB_PRS[@]} -gt 0 ]; then
+        log_info "Applying library PR replacements first..."
+        cd base/free5gc
+        
+        for lib in "${!LIB_PRS[@]}"; do
+            prs="${LIB_PRS[$lib]}"
+            for pr in $prs; do
+                apply_library_pr "$lib" "$pr"
+            done
+        done
+        
+        cd ../../
+    fi
+    
+    # Then, merge main free5gc repo PR if specified
     if [ -n "$FREE5GC_PR" ]; then
         log_info "Processing main free5gc repo PR #$FREE5GC_PR..."
         
@@ -768,6 +910,12 @@ if [ "$TYPE" = "nf" ]; then
     for nf in "${!NF_PRS[@]}"; do
         echo "  - $nf: PRs ${NF_PRS[$nf]}"
     done
+    if [ ${#LIB_PRS[@]} -gt 0 ]; then
+        echo "Library/PR Configuration:"
+        for lib in "${!LIB_PRS[@]}"; do
+            echo "  - $lib: PRs ${LIB_PRS[$lib]}"
+        done
+    fi
 else
     echo "Library: $LIBRARY, PR: #$LIB_PR"
 fi
